@@ -68,7 +68,7 @@ button, input {
 <div class="inline-block bg-emerald-950 text-emerald-400
 px-4 py-2 rounded-full text-xs mb-4">
 
-MG SHANKAR TECH • FRAME EXTRACTOR
+• FRAME EXTRACTOR
 
 </div>
 
@@ -270,7 +270,6 @@ class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
 
 <footer class="text-center text-slate-500 text-sm mt-16">
 
-<p>Developed by MG Shankar Tech</p>
 
 <p class="mt-2">Video to DSLR Frame Extractor</p>
 
