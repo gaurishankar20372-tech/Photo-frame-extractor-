@@ -1,4 +1,4 @@
-name: Build MG appstore APK
+name: Build Photo Frame Extractor APK
 
 on:
   workflow_dispatch:
@@ -14,39 +14,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      # 3. Setup Java JDK 21
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '21'
 
-      # 4. Install dependencies
       - name: Install dependencies
         run: |
           npm ci || npm install
 
-      # 5. Build web app
       - name: Build web app
         run: |
           npm run build
 
-      # 6. Initialize Capacitor & Android Platform
       - name: Initialize Capacitor & Android Platform
         run: |
           if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            npx cap init "MG appstore" "com.mg-appstore" --web-dir dist
+            npx cap init "Photo Frame Extractor" "com.mg.photoframeextractor" --web-dir dist
           fi
 
           if [ ! -d "android" ]; then
@@ -55,17 +49,15 @@ jobs:
             npx cap sync android
           fi
 
-      # 7. Configure Android Permissions & Audio Access for MG appstore 
       - name: Configure Android Permissions
         run: |
           MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
+
           if [ -f "$MANIFEST_FILE" ]; then
-            # Ensure microphone and audio permissions are declared
             if ! grep -q "android.permission.RECORD_AUDIO" "$MANIFEST_FILE"; then
               sed -i '/<manifest/a \    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST_FILE"
             fi
 
-            # Enable cleartext traffic if needed for remote bridges
             sed -i 's/<application /<application android:usesCleartextTraffic="true" /' "$MANIFEST_FILE"
           fi
 
@@ -89,39 +81,31 @@ jobs:
           }
           EOF
 
-      # 8. Sync Android assets
       - name: Sync Capacitor
         run: |
           npx cap sync android
 
-      # 9. Build Android Debug APK
       - name: Build APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # 10. Prepare APK
       - name: Prepare APK
         run: |
           mkdir -p release
-          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk release/MG appstore.apk
-          else
-            find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} release/MG appstore.apk \;
-          fi
-          echo "Generated APK file details:"
-          ls -lh release/MG appstore.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release/Photo Frame Extractor.apk"
 
-      # 11. Upload APK as Workflow Artifact
+          echo "Generated APK file details:"
+          ls -lh "release/Photo Frame Extractor.apk"
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MG-APPSTORE-APK
-          path: release/MG appstore.apk
+          name: PHOTO-FRAME-EXTRACTOR-APK
+          path: "release/Photo Frame Extractor.apk"
           retention-days: 30
 
-      # 12. Create GitHub Release
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -129,7 +113,7 @@ jobs:
           TAG="v1.0.${{ github.run_number }}"
 
           gh release create "$TAG" \
-            release/MG appstore.apk\
-            --title "MG appstore $TAG" \
-            --notes "MG appstore APK release. Built automatically from the main branch via GitHub Actions." \
+            "release/Photo Frame Extractor.apk" \
+            --title "Photo Frame Extractor $TAG" \
+            --notes "Photo Frame Extractor APK release. Built automatically from the main branch via GitHub Actions." \
             --latest || echo "Release create step completed."
