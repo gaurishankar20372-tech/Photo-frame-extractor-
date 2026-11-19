@@ -14,98 +14,120 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+
+      # 1. Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 2. Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
+      # 3. Java
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '21'
+          distribution: zulu
+          java-version: 21
 
-      - name: Install dependencies
+      # 4. Install Dependencies
+      - name: Install Dependencies
         run: |
-          npm ci || npm install
-
-      - name: Build web app
-        run: |
-          npm run build
-
-      - name: Initialize Capacitor & Android Platform
-        run: |
-          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
-            npx cap init "Photo Frame Extractor" "com.mg.photoframeextractor" --web-dir dist
+          if [ ! -f package.json ]; then
+            npm init -y
           fi
 
-          if [ ! -d "android" ]; then
-            npx cap add android
+          npm install
+          npm install @capacitor/core @capacitor/android
+          npm install -D @capacitor/cli vite
+
+      # 5. Build Web App
+      - name: Build Web App
+        run: |
+          if [ ! -f index.html ]; then
+            echo "ERROR: index.html not found!"
+            exit 1
+          fi
+
+          if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
+            npm run build
           else
-            npx cap sync android
+            npx vite build
           fi
 
-      - name: Configure Android Permissions
+      # 6. Configure Capacitor
+      - name: Configure Capacitor
         run: |
-          MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
-
-          if [ -f "$MANIFEST_FILE" ]; then
-            if ! grep -q "android.permission.RECORD_AUDIO" "$MANIFEST_FILE"; then
-              sed -i '/<manifest/a \    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST_FILE"
-            fi
-
-            sed -i 's/<application /<application android:usesCleartextTraffic="true" /' "$MANIFEST_FILE"
+          if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
+            npx cap init "Photo Frame Extractor" \
+              "com.mg.photoframeextractor" \
+              --web-dir dist
           fi
 
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
-
-          cat << 'EOF' >> android/build.gradle
-
-          subprojects {
-              configurations.all {
-                  resolutionStrategy {
-                      eachDependency { DependencyResolveDetails details ->
-                          if (details.requested.group == "org.jetbrains.kotlin" &&
-                              (details.requested.name == "kotlin-stdlib-jdk7" ||
-                               details.requested.name == "kotlin-stdlib-jdk8")) {
-                              details.useTarget("org.jetbrains.kotlin:kotlin-stdlib:${details.requested.version}")
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
-
-      - name: Sync Capacitor
+      # 7. Setup Android
+      - name: Setup Android Platform
         run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
           npx cap sync android
 
-      - name: Build APK
+      # 8. Android Permissions
+      - name: Configure Android Permissions
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          if [ -f "$MANIFEST" ]; then
+            for PERMISSION in \
+              android.permission.INTERNET \
+              android.permission.ACCESS_NETWORK_STATE \
+              android.permission.RECORD_AUDIO \
+              android.permission.MODIFY_AUDIO_SETTINGS
+            do
+              if ! grep -q "$PERMISSION" "$MANIFEST"; then
+                sed -i "/<manifest/a\\    <uses-permission android:name=\"$PERMISSION\" />" "$MANIFEST"
+              fi
+            done
+          fi
+
+      # 9. Build APK
+      - name: Build Android APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
 
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      # 10. Prepare APK
       - name: Prepare APK
         run: |
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk "release/Photo Frame Extractor.apk"
 
-          echo "Generated APK file details:"
-          ls -lh "release/Photo Frame Extractor.apk"
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
 
-      - name: Upload APK Artifact
+          if [ ! -f "$APK" ]; then
+            echo "APK not generated!"
+            exit 1
+          fi
+
+          cp "$APK" "release/Photo Frame Extractor.apk"
+
+          ls -lh release/
+
+      # 11. Upload Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PHOTO-FRAME-EXTRACTOR-APK
           path: "release/Photo Frame Extractor.apk"
           retention-days: 30
 
+      # 12. GitHub Release
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -115,5 +137,5 @@ jobs:
           gh release create "$TAG" \
             "release/Photo Frame Extractor.apk" \
             --title "Photo Frame Extractor $TAG" \
-            --notes "Photo Frame Extractor APK release. Built automatically from the main branch via GitHub Actions." \
-            --latest || echo "Release create step completed."
+            --notes "Photo Frame Extractor Android APK" \
+            --latest
